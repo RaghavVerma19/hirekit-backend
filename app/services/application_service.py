@@ -100,14 +100,49 @@ class ApplicationService:
             )
             return existing_app
 
-        # 4. Check Minimum CGPA Eligibility
-        if job.min_cgpa > 0:
-            edu_res = await db.execute(
-                select(Education).where(Education.user_id == user.id)
+        # 4. Check Institutional Placement Policy & Existing Offers
+        from app.models.job import JobTier
+        offers_res = await db.execute(
+            select(Application)
+            .join(Job, Application.job_id == Job.id)
+            .where(
+                Application.user_id == user.id,
+                Application.status == ApplicationStatus.OFFERED,
             )
-            educations = list(edu_res.scalars().all())
-            user_cgpa = max([e.cgpa for e in educations if e.cgpa] or [0.0])
+            .options(selectinload(Application.job))
+        )
+        existing_offers = list(offers_res.scalars().all())
+        for off in existing_offers:
+            offered_tier = getattr(off.job, "tier", JobTier.REGULAR)
+            if offered_tier == JobTier.SUPER_DREAM:
+                raise AppException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    error_code="POLICY_SUPER_DREAM_LOCKED",
+                    message="Institutional Policy: You have secured a Super Dream offer and are restricted from applying to further placement drives.",
+                )
+            elif offered_tier == JobTier.DREAM:
+                if job.tier in [JobTier.REGULAR, JobTier.DREAM]:
+                    raise AppException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        error_code="POLICY_DREAM_LOCKED",
+                        message="Institutional Policy: You already hold a Dream offer and may only apply for Super Dream placement drives.",
+                    )
+            elif offered_tier == JobTier.REGULAR:
+                if job.tier == JobTier.REGULAR:
+                    raise AppException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        error_code="POLICY_REGULAR_LOCKED",
+                        message="Institutional Policy: You already hold a Regular offer and may only apply for Dream or Super Dream placement drives.",
+                    )
 
+        # 5. Check Academic Eligibility (CGPA, Backlogs, Departments)
+        edu_res = await db.execute(
+            select(Education).where(Education.user_id == user.id)
+        )
+        educations = list(edu_res.scalars().all())
+
+        if job.min_cgpa > 0:
+            user_cgpa = max([e.cgpa for e in educations if e.cgpa] or [0.0])
             if user_cgpa > 0 and user_cgpa < job.min_cgpa:
                 raise AppException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -115,7 +150,16 @@ class ApplicationService:
                     message=f"Your CGPA ({user_cgpa:.1f}) is below the required minimum of {job.min_cgpa}.",
                 )
 
-        # 5. Resolve Resume
+        if job.max_active_backlogs >= 0 and educations:
+            user_backlogs = sum([getattr(e, "active_backlogs", 0) for e in educations])
+            if user_backlogs > job.max_active_backlogs:
+                raise AppException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    error_code="INELIGIBLE_BACKLOGS",
+                    message=f"This drive permits at most {job.max_active_backlogs} active backlogs (You have {user_backlogs}).",
+                )
+
+        # 6. Resolve Resume & Snapshot Candidate Dossier
         resolved_resume_id = resume_id
         if not resolved_resume_id:
             # Fallback to user's primary resume
@@ -144,12 +188,23 @@ class ApplicationService:
                 message="Please create or upload a resume before applying for jobs.",
             )
 
-        # 6. Create Application and initial Timeline Event
+        resume_obj = await db.get(Resume, resolved_resume_id)
+        resume_snapshot = {
+            "candidate_name": user.name,
+            "candidate_email": user.email,
+            "candidate_phone": user.phone,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "parsed_data": resume_obj.parsed_data if resume_obj else {},
+        }
+
+        # 7. Create Application and initial Timeline Event
         new_application = Application(
             job_id=job.id,
             user_id=user.id,
             resume_id=resolved_resume_id,
             status=ApplicationStatus.APPLIED,
+            current_round=1,
+            resume_snapshot=resume_snapshot,
         )
         db.add(new_application)
         await db.flush()
@@ -158,7 +213,7 @@ class ApplicationService:
             application_id=new_application.id,
             status=ApplicationStatus.APPLIED,
             actor="STUDENT",
-            note="Application submitted with primary resume.",
+            note="Application submitted with verified resume snapshot.",
         )
         db.add(event)
         await db.commit()

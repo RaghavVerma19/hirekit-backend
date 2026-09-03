@@ -241,3 +241,154 @@ class ATSService:
             missing_sections=missing,
             is_job_matched=False,
         )
+
+    @staticmethod
+    async def deep_ai_audit_resume(
+        content: Dict[str, Any], target_role: str = "Software Engineering"
+    ) -> Dict[str, Any]:
+        """Perform exhaustive, in-depth Tech Recruiter & ATS audit using Google Gemini 2.5 Flash."""
+        rule_result = ATSService._rule_based_evaluation(content)
+        fallback_data = {
+            "overall_score": rule_result.overall_score,
+            "readiness_verdict": (
+                "Competitive Candidate"
+                if rule_result.overall_score >= 75
+                else "Needs Optimization"
+            ),
+            "executive_summary": rule_result.pass_rate_message,
+            "pillars": {
+                "impact_metrics": {
+                    "score": rule_result.overall_score,
+                    "status": "Adequate",
+                    "critique": "Candidate resume covers foundational sections. More quantifiable metrics recommended.",
+                },
+                "ats_formatting": {
+                    "score": 90,
+                    "status": "ATS Compliant",
+                    "critique": "Standard headings and clean parseable hierarchy detected.",
+                },
+                "skills_alignment": {
+                    "score": 75,
+                    "status": "Developing",
+                    "critique": "Skills list matches standard job description keywords.",
+                    "matched_keywords": content.get("skills", [])[:5],
+                    "critical_missing_skills": ["Docker", "CI/CD", "PostgreSQL"],
+                },
+                "action_verbs": {
+                    "score": 70,
+                    "status": "Moderate",
+                    "critique": "Action verbs present across experiences.",
+                },
+            },
+            "action_checklist": [
+                {
+                    "priority": imp.impact,
+                    "category": imp.section,
+                    "action": imp.suggested,
+                    "expected_impact": "Directly boosts ATS keyword match rate and recruiter read speed",
+                }
+                for imp in rule_result.improvements
+            ],
+            "weak_bullets_rewrites": [],
+        }
+
+        if not settings.GEMINI_API_KEY:
+            return fallback_data
+
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+            prompt = f"""
+You are an Elite Principal Technical Recruiter & Senior Director of Campus Placements at top-tier tech companies (FAANG and Tier-1 startups).
+You inspect software engineering student resumes with extreme rigor, judging ATS readability, STAR bullet points, quantifiable metrics, and recruiter keyword ranking for the target role: "{target_role}".
+
+Candidate Resume JSON Data:
+{json.dumps(content, indent=2)}
+
+Produce an exhaustive, deeply detailed tech recruiter audit report.
+Your response MUST be a valid, parseable JSON object matching this schema:
+{{
+  "overall_score": <integer between 30 and 96>,
+  "readiness_verdict": "<e.g. Tier-1 Placement Ready | Highly Competitive Candidate | Needs Strategic Refinement | Early Developing Profile>",
+  "executive_summary": "<A powerful, 2-3 sentence executive recruiter verdict on the candidate's strengths, weaknesses, and market positioning>",
+
+  "pillars": {{
+    "impact_metrics": {{
+      "score": <integer 0-100>,
+      "status": "<e.g. High STAR Impact | Moderate | Lacks Quantifiable Scale>",
+      "critique": "<Detailed analysis of whether bullets show measurable results (%, users, throughput, latency) vs mere duties>"
+    }},
+    "ats_formatting": {{
+      "score": <integer 0-100>,
+      "status": "<e.g. ATS Optimized | Minor Clutter | Formatting Issues>",
+      "critique": "<Detailed feedback on hierarchy, parseability, contact information accessibility, and clear headings>"
+    }},
+    "skills_alignment": {{
+      "score": <integer 0-100>,
+      "status": "<e.g. Strong Match | Missing Key Frameworks | Thin>",
+      "critique": "<Specific analysis of languages vs frameworks vs tools for {target_role}>",
+      "matched_keywords": ["<keyword 1>", "<keyword 2>"],
+      "critical_missing_skills": ["<missing skill 1>", "<missing skill 2>"]
+    }},
+    "action_verbs": {{
+      "score": <integer 0-100>,
+      "status": "<e.g. Dynamic Action-Oriented | Passive / Duty-Focused>",
+      "critique": "<Evaluation of power verbs: Architected, Spearheaded, Built, Optimized vs Assisted, Responsible for, Worked on>"
+    }}
+  }},
+
+  "weak_bullets_rewrites": [
+    {{
+      "section": "<Section Name e.g. Experience / Project>",
+      "original": "<Exact weak bullet point from resume>",
+      "suggested": "<Rewritten high-impact bullet point using STAR framework with action verb and quantifiable metric>",
+      "improvement_reason": "<Why this rewritten bullet catches a recruiter's eye>"
+    }}
+  ],
+
+  "action_checklist": [
+    {{
+      "priority": "<CRITICAL | HIGH | MEDIUM | LOW>",
+      "category": "<Summary | Experience | Projects | Skills | Education>",
+      "action": "<Exact, specific action step the candidate must take>",
+      "expected_impact": "<How this directly improves recruiter search ranking or interview callback rate>"
+    }}
+  ]
+}}
+"""
+
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.2,
+            )
+
+            loop = asyncio.get_running_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt,
+                    config=config,
+                ),
+            )
+
+            ai_result = json.loads(resp.text)
+            ai_result["is_ai_evaluated"] = True
+            ai_result["model_used"] = "Google Gemini 2.5 Flash"
+            ai_result["target_role"] = target_role
+            logger.info(
+                "gemini_resume_audit_success",
+                overall_score=ai_result.get("overall_score"),
+            )
+            return ai_result
+
+        except Exception as e:
+            logger.error(
+                "gemini_resume_audit_failed_using_fallback",
+                error=str(e),
+                exc_info=True,
+            )
+            return fallback_data

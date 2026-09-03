@@ -3,9 +3,11 @@ import enum
 from typing import Any, Dict, List, Optional
 import uuid
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     Float,
+    Integer,
     JSON,
     String,
     Text,
@@ -29,6 +31,12 @@ class JobStatus(str, enum.Enum):
     CLOSED = "closed"
 
 
+class JobTier(str, enum.Enum):
+    REGULAR = "REGULAR"
+    DREAM = "DREAM"
+    SUPER_DREAM = "SUPER_DREAM"
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -40,17 +48,25 @@ class Job(Base):
     company_logo: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     location: Mapped[str] = mapped_column(String(150), default="Hybrid / On-site", nullable=False)
     type: Mapped[JobType] = mapped_column(
-        Enum(JobType, name="job_type_enum"), default=JobType.FULL_TIME, nullable=False
+        Enum(JobType, native_enum=False), default=JobType.FULL_TIME, nullable=False
+    )
+    tier: Mapped[JobTier] = mapped_column(
+        Enum(JobTier, native_enum=False), default=JobTier.REGULAR, nullable=False, index=True
     )
     ctc: Mapped[str] = mapped_column(String(100), default="Best in Industry", nullable=False)
     min_cgpa: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    max_active_backlogs: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    min_10th_marks: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    min_12th_marks: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     eligible_departments: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     eligible_batches: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     skills: Mapped[List[str]] = mapped_column(JSON, default=list, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     requirements: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    rounds: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    is_drive_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus, name="job_status_enum"), default=JobStatus.OPEN, nullable=False, index=True
+        Enum(JobStatus, native_enum=False), default=JobStatus.OPEN, nullable=False, index=True
     )
     deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     posted_at: Mapped[datetime] = mapped_column(

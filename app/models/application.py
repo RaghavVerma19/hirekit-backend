@@ -6,6 +6,8 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -45,11 +47,17 @@ class Application(Base):
         UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True
     )
     status: Mapped[ApplicationStatus] = mapped_column(
-        Enum(ApplicationStatus, name="application_status_enum"),
+        Enum(ApplicationStatus, native_enum=False),
         default=ApplicationStatus.APPLIED,
         nullable=False,
         index=True,
     )
+    current_round: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    resume_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    offer_ctc: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    offer_letter_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    offer_accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

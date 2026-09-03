@@ -18,12 +18,30 @@ from app.schemas.job import JobCreate, JobListItem, JobOut
 class JobService:
     @staticmethod
     def check_eligibility(
-        user: User, job: Job, educations: List[Education]
+        user: User,
+        job: Job,
+        educations: List[Education],
+        existing_offers: Optional[List[Application]] = None,
     ) -> Tuple[bool, List[str]]:
-        """Evaluate student eligibility against job requirements."""
+        """Evaluate student eligibility against job requirements & institutional policy."""
         reasons: List[str] = []
 
-        # 1. CGPA check
+        # 1. Institutional Tier Policy & Offer Lock
+        from app.models.job import JobTier
+        if existing_offers:
+            for off in existing_offers:
+                offered_tier = getattr(off.job, "tier", JobTier.REGULAR) if off.job else JobTier.REGULAR
+                if offered_tier == JobTier.SUPER_DREAM:
+                    reasons.append("Policy Lock: You have secured a Super Dream offer.")
+                    break
+                elif offered_tier == JobTier.DREAM and job.tier in [JobTier.REGULAR, JobTier.DREAM]:
+                    reasons.append("Policy Lock: Dream offer holders can only apply for Super Dream drives.")
+                    break
+                elif offered_tier == JobTier.REGULAR and job.tier == JobTier.REGULAR:
+                    reasons.append("Policy Lock: Regular offer holders can only apply for Dream or Super Dream drives.")
+                    break
+
+        # 2. CGPA check
         if job.min_cgpa > 0:
             user_cgpa = 0.0
             if educations:
@@ -37,7 +55,7 @@ class JobService:
                     f"Minimum required CGPA is {job.min_cgpa} (Your recorded CGPA: {user_cgpa:.1f})"
                 )
 
-        # 2. Department check
+        # 3. Department check
         if job.eligible_departments and educations:
             user_depts = [edu.department.lower() for edu in educations if edu.department]
             matched = any(
@@ -49,7 +67,15 @@ class JobService:
                     f"Eligible departments: {', '.join(job.eligible_departments)}"
                 )
 
-        # 3. Deadline check
+        # 4. Backlog check
+        if job.max_active_backlogs >= 0 and educations:
+            user_backlogs = sum([getattr(e, "active_backlogs", 0) for e in educations])
+            if user_backlogs > job.max_active_backlogs:
+                reasons.append(
+                    f"Drive permits at most {job.max_active_backlogs} active backlogs (You have {user_backlogs})."
+                )
+
+        # 5. Deadline check
         deadline = job.deadline.replace(tzinfo=timezone.utc) if job.deadline.tzinfo is None else job.deadline
         if deadline < datetime.now(timezone.utc) or job.status == JobStatus.CLOSED:
             reasons.append("Application deadline for this drive has passed.")
@@ -121,10 +147,23 @@ class JobService:
             )
             applied_job_ids = set(app_res.scalars().all())
 
+            offers_res = await db.execute(
+                select(Application)
+                .join(Job, Application.job_id == Job.id)
+                .where(
+                    Application.user_id == user.id,
+                    Application.status == "OFFERED",
+                )
+                .options(selectinload(Application.job))
+            )
+            existing_offers = list(offers_res.scalars().all())
+
         items: List[JobListItem] = []
         for j in jobs:
             if user:
-                is_eligible, reasons = JobService.check_eligibility(user, j, educations)
+                is_eligible, reasons = JobService.check_eligibility(
+                    user, j, educations, existing_offers
+                )
                 match_score = JobService.calculate_match_score(skills, j.skills)
                 has_applied = j.id in applied_job_ids
             else:
@@ -139,13 +178,19 @@ class JobService:
                 company_logo=j.company_logo,
                 location=j.location,
                 type=j.type,
+                tier=getattr(j, "tier", "REGULAR"),
                 ctc=j.ctc,
                 min_cgpa=j.min_cgpa,
+                max_active_backlogs=getattr(j, "max_active_backlogs", 0),
+                min_10th_marks=getattr(j, "min_10th_marks", 0.0),
+                min_12th_marks=getattr(j, "min_12th_marks", 0.0),
                 eligible_departments=j.eligible_departments,
                 eligible_batches=j.eligible_batches,
                 skills=j.skills,
                 description=j.description,
                 requirements=j.requirements,
+                rounds=getattr(j, "rounds", []) or [],
+                is_drive_active=getattr(j, "is_drive_active", True),
                 status=j.status,
                 deadline=j.deadline,
                 posted_at=j.posted_at,
@@ -162,7 +207,7 @@ class JobService:
     async def get_job(
         db: AsyncSession, job_id: uuid.UUID, user: Optional[User] = None
     ) -> JobListItem:
-        """Fetch single job with eligibility details."""
+        """Fetch full job details with user-specific eligibility."""
         job = await db.get(Job, job_id)
         if not job:
             raise AppException(
@@ -173,6 +218,7 @@ class JobService:
 
         educations: List[Education] = []
         skills: List[UserSkill] = []
+        existing_offers: List[Application] = []
         has_applied = False
 
         if user:
@@ -193,8 +239,19 @@ class JobService:
             )
             has_applied = app_res.scalar_one_or_none() is not None
 
+            offers_res = await db.execute(
+                select(Application)
+                .join(Job, Application.job_id == Job.id)
+                .where(
+                    Application.user_id == user.id,
+                    Application.status == "OFFERED",
+                )
+                .options(selectinload(Application.job))
+            )
+            existing_offers = list(offers_res.scalars().all())
+
         is_eligible, reasons = (
-            JobService.check_eligibility(user, job, educations)
+            JobService.check_eligibility(user, job, educations, existing_offers)
             if user
             else (True, [])
         )
@@ -211,13 +268,19 @@ class JobService:
             company_logo=job.company_logo,
             location=job.location,
             type=job.type,
+            tier=getattr(job, "tier", "REGULAR"),
             ctc=job.ctc,
             min_cgpa=job.min_cgpa,
+            max_active_backlogs=getattr(job, "max_active_backlogs", 0),
+            min_10th_marks=getattr(job, "min_10th_marks", 0.0),
+            min_12th_marks=getattr(job, "min_12th_marks", 0.0),
             eligible_departments=job.eligible_departments,
             eligible_batches=job.eligible_batches,
             skills=job.skills,
             description=job.description,
             requirements=job.requirements,
+            rounds=getattr(job, "rounds", []) or [],
+            is_drive_active=getattr(job, "is_drive_active", True),
             status=job.status,
             deadline=job.deadline,
             posted_at=job.posted_at,
@@ -229,20 +292,32 @@ class JobService:
 
     @staticmethod
     async def create_job(db: AsyncSession, job_in: JobCreate) -> Job:
-        """Create a new job posting (TPO/Admin action)."""
+        """Create a new campus placement drive (TPO/Admin action)."""
+        default_rounds = [
+            {"order": 1, "name": "Resume Screening", "type": "SCREENING"},
+            {"order": 2, "name": "Online Assessment (OA)", "type": "OA"},
+            {"order": 3, "name": "Technical Interview", "type": "INTERVIEW"},
+            {"order": 4, "name": "HR & Management Round", "type": "HR"},
+        ]
         new_job = Job(
             title=job_in.title,
             company_name=job_in.company_name,
             company_logo=job_in.company_logo,
             location=job_in.location,
             type=job_in.type,
+            tier=job_in.tier or "REGULAR",
             ctc=job_in.ctc,
             min_cgpa=job_in.min_cgpa,
+            max_active_backlogs=job_in.max_active_backlogs,
+            min_10th_marks=job_in.min_10th_marks,
+            min_12th_marks=job_in.min_12th_marks,
             eligible_departments=job_in.eligible_departments,
             eligible_batches=job_in.eligible_batches,
             skills=job_in.skills,
             description=job_in.description,
             requirements=job_in.requirements,
+            rounds=job_in.rounds or default_rounds,
+            is_drive_active=True,
             deadline=job_in.deadline,
         )
         db.add(new_job)

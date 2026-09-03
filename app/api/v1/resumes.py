@@ -1,13 +1,17 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from pydantic import BaseModel, Field
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.errors import AppException
+from app.core.rate_limit import rate_limit
 from app.db.redis import get_redis
 from app.db.session import get_db
+from app.models.resume import Resume
 from app.models.user import User
 from app.schemas.common import MessageOut
 from app.schemas.resume import (
@@ -22,6 +26,11 @@ from app.services.leaderboard_service import LeaderboardService
 from app.services.resume_service import ResumeService
 
 router = APIRouter(prefix="/resumes", tags=["Resume Studio & ATS"])
+
+
+class ResumeContentAuditIn(BaseModel):
+    content: Dict[str, Any]
+    target_role: str = "Software Engineering"
 
 
 @router.get(
@@ -53,6 +62,97 @@ async def create_resume(
     """Create a new resume with optional auto-population from profile."""
     resume = await ResumeService.create_resume(db, current_user.id, create_in)
     return ResumeDetailOut.model_validate(resume)
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Upload & Parse Resume PDF with AI Tech Recruiter Audit",
+    dependencies=[Depends(rate_limit(max_requests=10, window_seconds=60, action="resume_upload"))],
+)
+async def upload_resume_pdf(
+    file: UploadFile = File(...),
+    target_role: str = Query("Software Engineering", description="Target placement domain"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Parse uploaded resume PDF, evaluate via Gemini 2.5 Flash Tech Recruiter AI, and create resume record."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="INVALID_FILE_TYPE",
+            message="Please upload a valid PDF document.",
+        )
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="FILE_TOO_LARGE",
+            message="Resume PDF exceeds maximum allowed size (10MB).",
+        )
+
+    if not file_bytes.startswith(b"%PDF"):
+        raise AppException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="INVALID_PDF_FORMAT",
+            message="The uploaded file is not a valid PDF document.",
+        )
+
+    try:
+        parsed_content = ResumeService.parse_resume_pdf(file_bytes)
+        audit_result = await ATSService.deep_ai_audit_resume(parsed_content, target_role)
+
+        # Create new resume entry in database
+        resume_title = parsed_content.get("title") or f"{file.filename.rsplit('.', 1)[0]}"
+        new_resume = Resume(
+            user_id=current_user.id,
+            title=resume_title[:150],
+            template_id="modern-professional",
+            content_json=parsed_content,
+            content_hash=ATSService.compute_content_hash(parsed_content),
+            ats_score=audit_result.get("overall_score"),
+            ats_feedback=audit_result,
+            is_primary=False,
+        )
+        db.add(new_resume)
+        await db.commit()
+        await db.refresh(new_resume)
+
+        return {
+            "success": True,
+            "resume": ResumeDetailOut.model_validate(new_resume),
+            "audit": audit_result,
+            "parsed": parsed_content,
+        }
+    except AppException:
+        raise
+    except Exception as e:
+        raise AppException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="RESUME_PARSING_FAILED",
+            message=f"Could not parse resume PDF: {str(e)}",
+        )
+
+
+@router.post(
+    "/audit-content",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Run Deep AI Audit on Resume Content",
+    dependencies=[Depends(rate_limit(max_requests=15, window_seconds=60, action="resume_audit"))],
+)
+async def audit_resume_content(
+    payload: ResumeContentAuditIn,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Evaluate editor resume JSON with Gemini 2.5 Flash Tech Recruiter AI."""
+    audit_result = await ATSService.deep_ai_audit_resume(payload.content, payload.target_role)
+    return {
+        "success": True,
+        "audit": audit_result,
+    }
 
 
 @router.get(
