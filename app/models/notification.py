@@ -35,7 +35,7 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[NotificationType] = mapped_column(
-        Enum(NotificationType, name="notification_type_enum"),
+        Enum(NotificationType, name="notification_type_enum", native_enum=False),
         default=NotificationType.PLACEMENT,
         nullable=False,
     )

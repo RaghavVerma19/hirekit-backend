@@ -43,7 +43,7 @@ class Interview(Base):
     )
     meeting_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     status: Mapped[InterviewStatus] = mapped_column(
-        Enum(InterviewStatus, name="interview_status_enum"),
+        Enum(InterviewStatus, name="interview_status_enum", native_enum=False),
         default=InterviewStatus.SCHEDULED,
         nullable=False,
     )

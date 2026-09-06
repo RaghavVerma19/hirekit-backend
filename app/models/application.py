@@ -89,7 +89,7 @@ class ApplicationEvent(Base):
         UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[ApplicationStatus] = mapped_column(
-        Enum(ApplicationStatus, name="application_status_enum"), nullable=False
+        Enum(ApplicationStatus, name="application_status_enum", native_enum=False), nullable=False
     )
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     actor: Mapped[str] = mapped_column(String(50), default="STUDENT", nullable=False)
