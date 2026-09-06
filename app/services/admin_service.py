@@ -125,12 +125,33 @@ class AdminService:
 
         placement_rate = round((placed_students / total_students) * 100, 1)
 
+        # Dynamic CTC calculation from real offers
+        offers_res = await db.execute(
+            select(Application.offer_ctc, Job.ctc)
+            .outerjoin(Job, Application.job_id == Job.id)
+            .where(Application.status == ApplicationStatus.OFFERED)
+        )
+        ctc_records = offers_res.all()
+        ctc_values = []
+        import re
+        for offer_ctc, job_ctc in ctc_records:
+            val_str = offer_ctc or job_ctc or ""
+            nums = re.findall(r"(\d+(?:\.\d+)?)", val_str)
+            if nums:
+                try:
+                    ctc_values.append(float(nums[0]))
+                except ValueError:
+                    pass
+
+        avg_ctc = round(sum(ctc_values) / len(ctc_values), 1) if ctc_values else 0.0
+        highest_ctc = max(ctc_values) if ctc_values else 0.0
+
         return AdminAnalyticsOverviewOut(
             placement_rate_percent=placement_rate,
             total_students=total_students,
             placed_students=placed_students,
-            avg_ctc_lpa="₹8.4 LPA",
-            highest_ctc_lpa="₹32.0 LPA",
+            avg_ctc_lpa=f"₹{avg_ctc} LPA" if ctc_values else "₹0 LPA",
+            highest_ctc_lpa=f"₹{highest_ctc} LPA" if ctc_values else "₹0 LPA",
             active_job_drives=active_drives,
             offers_count=offers_count,
         )

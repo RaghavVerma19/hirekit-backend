@@ -28,6 +28,9 @@ class Assignment(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    college_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey('colleges.id', ondelete='CASCADE'), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, default='', nullable=False)
     course_code: Mapped[str] = mapped_column(String(50), default='CS301', nullable=False)
@@ -53,6 +56,7 @@ class Assignment(Base):
     submissions: Mapped[List['AssignmentSubmission']] = relationship(
         'AssignmentSubmission', back_populates='assignment', cascade='all, delete-orphan'
     )
+    college: Mapped['College'] = relationship('College', back_populates='assignments')
 
 
 class AssignmentSubmission(Base):

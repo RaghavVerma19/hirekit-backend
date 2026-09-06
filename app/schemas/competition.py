@@ -36,3 +36,17 @@ class CompetitionOut(BaseModel):
     rules_url: Optional[str]
     is_registered: Optional[bool] = False
     created_at: datetime
+
+
+class CompetitionRegistrationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    competition_id: uuid.UUID
+    user_id: uuid.UUID
+    team_name: Optional[str] = None
+    registered_at: datetime
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_department: Optional[str] = None
+    user_batch: Optional[str] = None

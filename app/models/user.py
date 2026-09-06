@@ -24,6 +24,8 @@ class Role(str, enum.Enum):
     ADMIN = "ADMIN"
     TPO = "TPO"
     RECRUITER = "RECRUITER"
+    SUPER_ADMIN = "SUPER_ADMIN"
+    COLLEGE_ADMIN = "COLLEGE_ADMIN"
 
 
 class User(Base):
@@ -61,6 +63,11 @@ class User(Base):
 
     # Timezone (defaults to Asia/Kolkata)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata", nullable=False)
+
+    # Multi-tenant context (Nullable only for SUPER_ADMIN)
+    college_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("colleges.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -118,6 +125,7 @@ class User(Base):
     interviews: Mapped[list["Interview"]] = relationship(
         "Interview", back_populates="user", cascade="all, delete-orphan", order_by="asc(Interview.scheduled_at)"
     )
+    college: Mapped[Optional["College"]] = relationship("College", back_populates="users")
 
 
 class RefreshToken(Base):

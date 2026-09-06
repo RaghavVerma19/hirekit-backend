@@ -14,7 +14,9 @@ from app.schemas.competition import (
     CompetitionCreateIn,
     CompetitionOut,
     CompetitionRegisterIn,
+    CompetitionRegistrationOut,
 )
+from app.models.education import Education
 
 router = APIRouter(prefix='/competitions', tags=['Campus Competitions & Hackathons'])
 
@@ -97,3 +99,44 @@ async def register_competition(
     comp.participant_count += 1
     await db.commit()
     return MessageOut(message='Successfully registered for competition')
+
+
+@router.get('/{competition_id}/registrations', response_model=List[CompetitionRegistrationOut], status_code=status.HTTP_200_OK)
+async def list_competition_registrations(
+    competition_id: uuid.UUID,
+    current_user: User = Depends(require_role([Role.ADMIN, Role.TPO])),
+    db: AsyncSession = Depends(get_db),
+) -> List[CompetitionRegistrationOut]:
+    comp = await db.get(Competition, competition_id)
+    if not comp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Competition not found')
+
+    result = await db.execute(
+        select(CompetitionRegistration, User, Education)
+        .join(User, CompetitionRegistration.user_id == User.id)
+        .outerjoin(Education, Education.user_id == User.id)
+        .where(CompetitionRegistration.competition_id == competition_id)
+        .order_by(desc(CompetitionRegistration.registered_at))
+    )
+    rows = result.all()
+
+    seen_registrations = set()
+    output = []
+    for reg, user, edu in rows:
+        if reg.id in seen_registrations:
+            continue
+        seen_registrations.add(reg.id)
+        output.append(
+            CompetitionRegistrationOut(
+                id=reg.id,
+                competition_id=reg.competition_id,
+                user_id=reg.user_id,
+                team_name=reg.team_name,
+                registered_at=reg.registered_at,
+                user_name=user.name,
+                user_email=user.email,
+                user_department=edu.department if edu else None,
+                user_batch=str(edu.end_year) if (edu and edu.end_year) else None,
+            )
+        )
+    return output

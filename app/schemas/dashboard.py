@@ -13,6 +13,7 @@ class LeaderboardEntryOut(BaseModel):
     score: int
     department: str
     batch: str
+    role: Optional[str] = None
 
 
 class LinkedInScoreOut(BaseModel):

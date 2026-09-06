@@ -1,4 +1,5 @@
 from app.db.base import Base
+from app.models.college import College
 from app.models.accomplishment import Accomplishment, AccomplishmentType
 from app.models.application import Application, ApplicationEvent, ApplicationStatus
 from app.models.audit import AuditLog
@@ -28,6 +29,7 @@ from app.models.user import (
 
 __all__ = [
     "Base",
+    "College",
     "Role",
     "User",
     "RefreshToken",

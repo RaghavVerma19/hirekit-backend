@@ -21,6 +21,9 @@ class Post(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    college_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -43,6 +46,7 @@ class Post(Base):
     )
 
     author: Mapped["User"] = relationship("User", back_populates="posts")
+    college: Mapped["College"] = relationship("College", back_populates="posts")
     comments: Mapped[List["PostComment"]] = relationship(
         "PostComment",
         back_populates="post",

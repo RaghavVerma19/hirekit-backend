@@ -29,6 +29,9 @@ class Competition(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    college_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey('colleges.id', ondelete='CASCADE'), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, default='', nullable=False)
     category: Mapped[str] = mapped_column(String(100), default='Coding and Algorithms', nullable=False)
@@ -61,6 +64,7 @@ class Competition(Base):
     registrations: Mapped[List['CompetitionRegistration']] = relationship(
         'CompetitionRegistration', back_populates='competition', cascade='all, delete-orphan'
     )
+    college: Mapped['College'] = relationship('College', back_populates='competitions')
 
 
 class CompetitionRegistration(Base):

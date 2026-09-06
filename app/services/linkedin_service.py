@@ -434,6 +434,30 @@ Your response MUST be a valid, parseable JSON object matching this schema:
       }}
     ],
     "optimized_about_section": "<A complete, beautifully formatted LinkedIn About section written specifically for this candidate with custom intro, technical competencies list, project highlights, and contact CTA, using modern professional formatting with bullets>"
+  }},
+
+  "interviewer_psychology": {{
+    "first_impression_verdict": "<What a technical hiring manager concludes within the first 6 seconds of scanning this profile>",
+    "perceived_seniority_level": "<Intern / Junior Engineer | Mid-Level Contributor | Senior / Lead Potential>",
+    "culture_fit_signals": "<Work style and collaboration traits signaled by profile language, projects, and tone>",
+    "red_flags_for_recruiters": [
+      "<Potential red flag or ambiguity that causes recruiters to hesitate or skip>",
+      "<Second red flag or area where proof/metrics are critically missing>"
+    ],
+    "trust_signals": [
+      "<High-credibility indicator present in this profile (e.g. live deployments, specific tech versions, measurable results)>",
+      "<Second credibility booster>"
+    ]
+  }},
+
+  "ats_simulation": {{
+    "keyword_density_score": <integer 0-100>,
+    "boolean_search_matchability": "<High | Moderate | Low — how easily this profile matches recruiter Boolean queries like '(Python OR Go) AND AWS AND Docker'>",
+    "recruiter_search_rank_estimate": "<Top 5% | Top 15% | Top 35% | Below Average in Campus Batch>",
+    "visibility_booster_tips": [
+      "<Concrete tactic to increase LinkedIn search impression appearances>",
+      "<Profile keyword positioning improvement>"
+    ]
   }}
 }}
 """

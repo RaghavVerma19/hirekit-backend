@@ -17,6 +17,9 @@ from app.api.v1.assignments import router as assignments_router
 from app.api.v1.competitions import router as competitions_router
 from app.api.v1.events import router as events_router
 from app.api.v1.settings import router as settings_router
+from app.api.v1.admin import router as admin_router
+from app.api.v1.college import router as college_router
+from app.api.v1.super_admin import router as super_admin_router
 from app.api.v1.ws import router as ws_router
 
 api_v1_router = APIRouter()
@@ -40,4 +43,6 @@ api_v1_router.include_router(assignments_router)
 api_v1_router.include_router(competitions_router)
 api_v1_router.include_router(settings_router)
 api_v1_router.include_router(admin_router)
+api_v1_router.include_router(college_router)
+api_v1_router.include_router(super_admin_router)
 api_v1_router.include_router(ws_router)

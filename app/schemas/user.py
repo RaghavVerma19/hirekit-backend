@@ -29,6 +29,7 @@ class UserOut(BaseModel):
     permanent_address: Optional[str] = None
     summary: Optional[str] = None
     additional_info: Optional[Dict[str, Any]] = None
+    college_id: Optional[uuid.UUID] = None
     is_verified: bool
     is_onboarded: bool
     timezone: str

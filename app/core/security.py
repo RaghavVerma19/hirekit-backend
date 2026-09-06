@@ -33,7 +33,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, role: str, extra_claims: Optional[Dict[str, Any]] = None) -> str:
+def create_access_token(
+    user_id: str,
+    role: str,
+    tenant_id: Optional[str] = None,
+    tenant_slug: Optional[str] = None,
+    extra_claims: Optional[Dict[str, Any]] = None,
+) -> str:
     """Create a signed JWT access token (15 min default)."""
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
@@ -44,6 +50,10 @@ def create_access_token(user_id: str, role: str, extra_claims: Optional[Dict[str
         "exp": int(expire.timestamp()),
         "type": "access",
     }
+    if tenant_id:
+        to_encode["tenant_id"] = str(tenant_id)
+    if tenant_slug:
+        to_encode["tenant_slug"] = str(tenant_slug)
     if extra_claims:
         to_encode.update(extra_claims)
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)

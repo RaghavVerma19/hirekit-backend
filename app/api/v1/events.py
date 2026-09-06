@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_role
 from app.db.session import get_db
+from app.models.education import Education
 from app.models.event import CollegeEvent, EventRegistration
 from app.models.user import Role, User
 from app.schemas.common import MessageOut
-from app.schemas.event import EventCreateIn, EventOut, EventUpdateIn
+from app.schemas.event import EventCreateIn, EventOut, EventRegistrationOut, EventUpdateIn
 
 router = APIRouter(prefix='/events', tags=['College Events'])
 
@@ -181,3 +182,43 @@ async def unregister_event(
         ev.registered_count -= 1
     await db.commit()
     return MessageOut(message='Successfully unregistered from event')
+
+
+@router.get('/{event_id}/registrations', response_model=List[EventRegistrationOut], status_code=status.HTTP_200_OK)
+async def list_event_registrations(
+    event_id: uuid.UUID,
+    current_user: User = Depends(require_role([Role.ADMIN, Role.TPO])),
+    db: AsyncSession = Depends(get_db),
+) -> List[EventRegistrationOut]:
+    ev = await db.get(CollegeEvent, event_id)
+    if not ev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Event not found')
+
+    result = await db.execute(
+        select(EventRegistration, User, Education)
+        .join(User, EventRegistration.user_id == User.id)
+        .outerjoin(Education, Education.user_id == User.id)
+        .where(EventRegistration.event_id == event_id)
+        .order_by(desc(EventRegistration.registered_at))
+    )
+    rows = result.all()
+
+    seen_registrations = set()
+    output = []
+    for reg, user, edu in rows:
+        if reg.id in seen_registrations:
+            continue
+        seen_registrations.add(reg.id)
+        output.append(
+            EventRegistrationOut(
+                id=reg.id,
+                event_id=reg.event_id,
+                user_id=reg.user_id,
+                registered_at=reg.registered_at,
+                user_name=user.name,
+                user_email=user.email,
+                user_department=edu.department if edu else None,
+                user_batch=str(edu.end_year) if (edu and edu.end_year) else None,
+            )
+        )
+    return output

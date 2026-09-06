@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Float,
+    ForeignKey,
     Integer,
     JSON,
     String,
@@ -43,6 +44,9 @@ class Job(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    college_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     company_name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
     company_logo: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
@@ -76,3 +80,4 @@ class Job(Base):
     applications: Mapped[List["Application"]] = relationship(
         "Application", back_populates="job", cascade="all, delete-orphan"
     )
+    college: Mapped["College"] = relationship("College", back_populates="jobs")

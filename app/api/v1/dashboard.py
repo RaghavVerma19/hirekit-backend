@@ -30,7 +30,7 @@ async def get_dashboard_overview(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> DashboardOverviewOut:
     """Aggregated dashboard payload with user profile, stats, top leaderboard, and LinkedIn metrics."""
-    top_leaderboard = await LeaderboardService.get_top(redis, db, limit=3)
+    top_leaderboard = await LeaderboardService.get_top(redis, db, limit=5)
 
     linkedin_metrics = LinkedInScoreOut(
         profile_score=85,

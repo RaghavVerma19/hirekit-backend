@@ -50,3 +50,16 @@ class EventOut(BaseModel):
     registered_count: int
     is_registered: Optional[bool] = False
     created_at: datetime
+
+
+class EventRegistrationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event_id: uuid.UUID
+    user_id: uuid.UUID
+    registered_at: datetime
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_department: Optional[str] = None
+    user_batch: Optional[str] = None

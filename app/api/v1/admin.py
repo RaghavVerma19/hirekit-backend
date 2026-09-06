@@ -267,9 +267,9 @@ async def get_statutory_compliance_report(
                 pass
 
     ctc_values.sort()
-    median_ctc = 7.5
-    highest_ctc = 24.0
-    avg_ctc = 8.2
+    median_ctc = 0.0
+    highest_ctc = 0.0
+    avg_ctc = 0.0
     if ctc_values:
         median_ctc = ctc_values[len(ctc_values) // 2]
         highest_ctc = max(ctc_values)

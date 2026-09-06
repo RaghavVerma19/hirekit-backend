@@ -4,6 +4,7 @@ import uuid
 from fastapi import status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 import structlog
 
 from app.core.config import settings
@@ -58,6 +59,7 @@ class AuthService:
             password_hash=hash_password(register_in.password),
             name=register_in.name,
             role=register_in.role,
+            college_id=uuid.UUID("00000000-0000-0000-0000-000000000001") if register_in.role != Role.SUPER_ADMIN else None,
             is_verified=False,
             is_onboarded=False,
         )
@@ -97,7 +99,7 @@ class AuthService:
         """Authenticate user, verify Argon2id hash, and issue token pair."""
         # Query user
         user = await db.scalar(
-            select(User).where(User.email == login_in.email.lower())
+            select(User).options(joinedload(User.college)).where(User.email == login_in.email.lower())
         )
 
         if not user:
@@ -135,10 +137,14 @@ class AuthService:
         db.add(refresh_token_record)
         await db.commit()
 
-        # Generate Access Token
+        # Generate Access Token with Tenant Claims
+        tenant_id = str(user.college_id) if user.college_id else None
+        tenant_slug = user.college.slug if user.college else None
         access_token = create_access_token(
             user_id=str(user.id),
             role=user.role.value,
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
         )
 
         logger.info("user_logged_in", user_id=str(user.id), email=user.email)
@@ -179,7 +185,7 @@ class AuthService:
                 )
                 if successor:
                     # Issue a fresh access token without failing
-                    user = await db.get(User, rt.user_id)
+                    user = await db.scalar(select(User).options(joinedload(User.college)).where(User.id == rt.user_id))
                     if user:
                         new_access_token = create_access_token(
                             user_id=str(user.id),
@@ -209,7 +215,7 @@ class AuthService:
                 message="Refresh token expired. Please log in again.",
             )
 
-        user = await db.get(User, rt.user_id)
+        user = await db.scalar(select(User).options(joinedload(User.college)).where(User.id == rt.user_id))
         if not user:
             raise AppException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -232,10 +238,14 @@ class AuthService:
         )
         db.add(new_rt)
 
-        # Create new access token
+        # Create new access token with Tenant Claims
+        tenant_id = str(user.college_id) if user.college_id else None
+        tenant_slug = user.college.slug if user.college else None
         new_access_token = create_access_token(
             user_id=str(user.id),
             role=user.role.value,
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
         )
         await db.commit()
 

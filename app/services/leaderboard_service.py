@@ -58,6 +58,7 @@ class LeaderboardService:
                             score=score_map.get(uid, 0),
                             department="Computer Science & Engg",
                             batch="2022-2026",
+                            role=user.headline or "Software Engineering Candidate",
                         )
                     )
             return leaderboard
