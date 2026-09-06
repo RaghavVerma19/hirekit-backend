@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision: str = '007_multi_tenant_colleges'
-down_revision: Union[str, None] = '60bde5b1fb1a'
+down_revision: Union[str, None] = '006_missing_events'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -80,72 +80,39 @@ def upgrade() -> None:
         """
     )
 
-    # 3. Add college_id to users
-    op.add_column('users', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_users_college_id'), 'users', ['college_id'], unique=False)
-    op.create_foreign_key('fk_users_college_id_colleges', 'users', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE users SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-
-    # 4. Add college_id to jobs
-    op.add_column('jobs', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_jobs_college_id'), 'jobs', ['college_id'], unique=False)
-    op.create_foreign_key('fk_jobs_college_id_colleges', 'jobs', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE jobs SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-    op.alter_column('jobs', 'college_id', nullable=False)
-
-    # 5. Add college_id to college_events
-    op.add_column('college_events', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_college_events_college_id'), 'college_events', ['college_id'], unique=False)
-    op.create_foreign_key('fk_college_events_college_id_colleges', 'college_events', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE college_events SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-    op.alter_column('college_events', 'college_id', nullable=False)
-
-    # 6. Add college_id to competitions
-    op.add_column('competitions', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_competitions_college_id'), 'competitions', ['college_id'], unique=False)
-    op.create_foreign_key('fk_competitions_college_id_colleges', 'competitions', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE competitions SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-    op.alter_column('competitions', 'college_id', nullable=False)
-
-    # 7. Add college_id to assignments
-    op.add_column('assignments', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_assignments_college_id'), 'assignments', ['college_id'], unique=False)
-    op.create_foreign_key('fk_assignments_college_id_colleges', 'assignments', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE assignments SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-    op.alter_column('assignments', 'college_id', nullable=False)
-
-    # 8. Add college_id to posts
-    op.add_column('posts', sa.Column('college_id', UUID(as_uuid=True), nullable=True))
-    op.create_index(op.f('ix_posts_college_id'), 'posts', ['college_id'], unique=False)
-    op.create_foreign_key('fk_posts_college_id_colleges', 'posts', 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
-    op.execute(f"UPDATE posts SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
-    op.alter_column('posts', 'college_id', nullable=False)
+    # 3-8. Add college_id to tenant tables (idempotent: skip if table/column missing)
+    for _table in ('users', 'jobs', 'college_events', 'competitions', 'assignments', 'posts'):
+        _insp = sa.inspect(op.get_bind())
+        if _table not in _insp.get_table_names():
+            continue
+        _cols = [c['name'] for c in _insp.get_columns(_table)]
+        if 'college_id' in _cols:
+            continue
+        op.add_column(_table, sa.Column('college_id', UUID(as_uuid=True), nullable=True))
+        op.create_index(op.f(f'ix_{_table}_college_id'), _table, ['college_id'], unique=False)
+        op.create_foreign_key(f'fk_{_table}_college_id_colleges', _table, 'colleges', ['college_id'], ['id'], ondelete='CASCADE')
+        op.execute(f"UPDATE {_table} SET college_id = '{DEFAULT_COLLEGE_ID}' WHERE college_id IS NULL;")
+        op.alter_column(_table, 'college_id', nullable=False)
 
 
 def downgrade() -> None:
-    op.drop_constraint('fk_posts_college_id_colleges', 'posts', type_='foreignkey')
-    op.drop_index(op.f('ix_posts_college_id'), table_name='posts')
-    op.drop_column('posts', 'college_id')
-
-    op.drop_constraint('fk_assignments_college_id_colleges', 'assignments', type_='foreignkey')
-    op.drop_index(op.f('ix_assignments_college_id'), table_name='assignments')
-    op.drop_column('assignments', 'college_id')
-
-    op.drop_constraint('fk_competitions_college_id_colleges', 'competitions', type_='foreignkey')
-    op.drop_index(op.f('ix_competitions_college_id'), table_name='competitions')
-    op.drop_column('competitions', 'college_id')
-
-    op.drop_constraint('fk_college_events_college_id_colleges', 'college_events', type_='foreignkey')
-    op.drop_index(op.f('ix_college_events_college_id'), table_name='college_events')
-    op.drop_column('college_events', 'college_id')
-
-    op.drop_constraint('fk_jobs_college_id_colleges', 'jobs', type_='foreignkey')
-    op.drop_index(op.f('ix_jobs_college_id'), table_name='jobs')
-    op.drop_column('jobs', 'college_id')
-
-    op.drop_constraint('fk_users_college_id_colleges', 'users', type_='foreignkey')
-    op.drop_index(op.f('ix_users_college_id'), table_name='users')
-    op.drop_column('users', 'college_id')
+    _insp = sa.inspect(op.get_bind())
+    _tables = _insp.get_table_names()
+    for _table in ('posts', 'assignments', 'competitions', 'college_events', 'jobs', 'users'):
+        if _table not in _tables:
+            continue
+        _cols = [c['name'] for c in _insp.get_columns(_table)]
+        if 'college_id' not in _cols:
+            continue
+        try:
+            op.drop_constraint(f'fk_{_table}_college_id_colleges', _table, type_='foreignkey')
+        except Exception:
+            pass
+        try:
+            op.drop_index(op.f(f'ix_{_table}_college_id'), table_name=_table)
+        except Exception:
+            pass
+        op.drop_column(_table, 'college_id')
 
     op.drop_index(op.f('ix_colleges_domain'), table_name='colleges')
     op.drop_index(op.f('ix_colleges_code'), table_name='colleges')
