@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -36,10 +37,11 @@ def setup_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None)
+        sanitized_errors = jsonable_encoder(exc.errors())
         logger.warning(
             "validation_error",
             path=request.url.path,
-            errors=exc.errors(),
+            errors=sanitized_errors,
             request_id=request_id,
         )
         return JSONResponse(
@@ -47,7 +49,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
             content=ErrorResponse(
                 error="VALIDATION_ERROR",
                 message="Invalid request parameters or payload.",
-                details=exc.errors(),
+                details=sanitized_errors,
                 request_id=request_id,
             ).model_dump(),
         )
