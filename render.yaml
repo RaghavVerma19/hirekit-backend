@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: hirekit-latex-compile
+    plan: free
+    runtime: docker
+    rootDir: latex-api
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: API_KEY
+        generateValue: true
+      - key: COMPILE_TIMEOUT
+        value: 25

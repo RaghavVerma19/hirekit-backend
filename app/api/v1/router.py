@@ -17,7 +17,6 @@ from app.api.v1.assignments import router as assignments_router
 from app.api.v1.competitions import router as competitions_router
 from app.api.v1.events import router as events_router
 from app.api.v1.settings import router as settings_router
-from app.api.v1.admin import router as admin_router
 from app.api.v1.college import router as college_router
 from app.api.v1.super_admin import router as super_admin_router
 from app.api.v1.ws import router as ws_router

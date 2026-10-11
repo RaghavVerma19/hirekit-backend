@@ -1,4 +1,5 @@
 import io
+import re
 from typing import Dict, Optional, Tuple
 import uuid
 from fastapi import status
@@ -36,22 +37,41 @@ class StorageService:
             )
 
     @staticmethod
+    def _is_mock_storage() -> bool:
+        return (
+            not (settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+            or settings.AWS_ACCESS_KEY_ID.startswith("mock")
+            or settings.ENVIRONMENT in ("development", "test")
+        )
+
+    @staticmethod
     async def generate_presigned_upload(
         user_id: uuid.UUID,
         filename: str,
         content_type: str,
         target_type: UploadTargetType,
     ) -> PresignedUploadOut:
-        """Generate a presigned S3/R2 upload URL with structured path and 5-min TTL."""
+        return await StorageService.generate_presigned_upload_url(user_id, filename, content_type, target_type)
+
+    @staticmethod
+    async def generate_presigned_upload_url(
+        user_id: uuid.UUID,
+        filename: str,
+        content_type: str,
+        target_type: UploadTargetType,
+    ) -> PresignedUploadOut:
+        """Generate presigned S3 PUT URL with short 5-minute TTL and UUID prefix."""
+        # 1. Validate extension and MIME
         StorageService.validate_upload(filename, content_type)
 
-        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+        # 2. Build unique object key
         unique_file_id = uuid.uuid4().hex[:12]
+        safe_filename = re.sub(r"[^a-zA-Z0-9_\.-]", "_", filename)
         key = f"uploads/{target_type.value}/{user_id}/{unique_file_id}_{safe_filename}"
         expires_in = 300  # 5 minutes
 
-        # If AWS credentials configured, generate genuine S3 presigned URL
-        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+        # If genuine AWS credentials configured in production, generate genuine S3 presigned URL
+        if not StorageService._is_mock_storage():
             try:
                 import aioboto3
                 session = aioboto3.Session()
@@ -94,7 +114,7 @@ class StorageService:
         if not file_url.startswith(settings.CDN_BASE):
             return False
         # In development mock mode, return True
-        if not (settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY):
+        if StorageService._is_mock_storage():
             return True
 
         key = file_url.replace(f"{settings.CDN_BASE}/", "")

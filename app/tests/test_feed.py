@@ -38,8 +38,9 @@ async def test_add_comment_and_list_posts(client: AsyncClient, db_session: Async
     user_res = await client.get("/api/v1/auth/me", headers=headers)
     user_id = user_res.json()["id"]
 
+    import uuid
     post = Post(
-        author_id=user_id,
+        author_id=uuid.UUID(user_id),
         author_name="Campus Admin",
         title="Welcome to the 2026 Placement Season",
         body="All companies visiting campus this semester will be listed on the jobs portal.",

@@ -28,8 +28,9 @@ async def test_upcoming_interviews(client: AsyncClient, db_session: AsyncSession
     token = await _register_and_login(client, "upcoming_student@test.com")
     headers = {"Authorization": f"Bearer {token}"}
 
+    import uuid
     me = await client.get("/api/v1/auth/me", headers=headers)
-    user_id = me.json()["id"]
+    user_id = uuid.UUID(me.json()["id"])
 
     # Seed 1 upcoming and 1 past interview
     future_time = datetime.now(timezone.utc) + timedelta(days=2)

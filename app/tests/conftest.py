@@ -10,6 +10,12 @@ from app.db.redis import get_redis
 from app.db.session import get_db
 from app.main import app as fastapi_app
 import app.models  # Register all models with Base.metadata
+import logging
+
+logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+
 
 # Use an async in-memory SQLite database for fast isolated unit/integration tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -104,6 +110,19 @@ async def setup_test_db():
     """Create all database tables before each test and drop them after."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with TestingSessionLocal() as session:
+        import uuid
+        from app.models.college import College
+        default_college = College(
+            id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            name="Default Campus College",
+            slug="default",
+            code="DEFAULT-01",
+        )
+        session.add(default_college)
+        await session.commit()
+
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

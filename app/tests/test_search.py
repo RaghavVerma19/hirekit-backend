@@ -27,8 +27,9 @@ async def test_global_search(client: AsyncClient, db_session: AsyncSession):
     })
     user_id = res_reg.json()["id"]
 
+    import uuid
     post = Post(
-        author_id=user_id,
+        author_id=uuid.UUID(user_id),
         author_name="Placement Lead",
         title="Guide to Python and FastAPI Interviews",
         body="Here are the top 20 questions asked in backend Python placement rounds.",

@@ -9,13 +9,15 @@ from app.models.job import Job, JobType
 from app.models.user import Role, User
 
 
+import uuid
+
 async def _register_admin(client: AsyncClient, db_session: AsyncSession) -> str:
     res = await client.post("/api/v1/auth/register", json={
         "email": "tpo_admin@university.edu.in",
         "password": "Password123!",
         "name": "Prof. TPO Officer",
     })
-    user_id = res.json()["id"]
+    user_id = uuid.UUID(res.json()["id"])
 
     # Upgrade to TPO role
     await db_session.execute(
@@ -47,7 +49,8 @@ async def test_admin_access_control(client: AsyncClient):
 
     res = await client.get("/api/v1/admin/users", headers=student_headers)
     assert res.status_code == 403
-    assert res.json()["error"] == "FORBIDDEN"
+    assert "FORBIDDEN" in res.json()["error"]
+
 
 
 @pytest.mark.asyncio

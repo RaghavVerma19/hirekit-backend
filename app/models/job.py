@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -45,7 +45,7 @@ class Job(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     college_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("colleges.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("colleges.id", ondelete="CASCADE"), default=uuid.UUID("00000000-0000-0000-0000-000000000001"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     company_name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)

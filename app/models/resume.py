@@ -10,7 +10,7 @@ from sqlalchemy import (
     String,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -26,7 +26,7 @@ class Resume(Base):
     )
     title: Mapped[str] = mapped_column(String(150), default="My Resume", nullable=False)
     pdf_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    template_id: Mapped[str] = mapped_column(String(50), default="modern-tech", nullable=False)
+    template_id: Mapped[str] = mapped_column(String(50), default="preserved-layout-v1", nullable=False)
     content_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
     ats_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)

@@ -25,7 +25,7 @@ async def test_create_and_list_resumes(client: AsyncClient):
 
     res_create = await client.post("/api/v1/resumes", json={
         "title": "Frontend Engineer Resume",
-        "template_id": "modern-tech",
+        "template_id": "preserved-layout-v1",
         "auto_populate": True,
     }, headers=headers)
     assert res_create.status_code == 201

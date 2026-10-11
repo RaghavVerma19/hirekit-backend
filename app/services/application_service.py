@@ -194,7 +194,7 @@ class ApplicationService:
             "candidate_email": user.email,
             "candidate_phone": user.phone,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "parsed_data": resume_obj.parsed_data if resume_obj else {},
+            "parsed_data": resume_obj.content_json if resume_obj else {},
         }
 
         # 7. Create Application and initial Timeline Event

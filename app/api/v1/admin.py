@@ -1,5 +1,6 @@
 from typing import List, Optional
 import uuid
+from pydantic import BaseModel, ConfigDict
 from fastapi import APIRouter, Depends, Query, status
 import redis.asyncio as aioredis
 from sqlalchemy import desc, select
@@ -384,5 +385,68 @@ async def update_placement_policy(
     await db.commit()
     await db.refresh(policy)
     return {"message": "Placement policy updated successfully", "college_name": policy.college_name}
+
+
+class AuditLogOut(BaseModel):
+    id: uuid.UUID
+    actor_id: uuid.UUID
+    actor_name: Optional[str] = None
+    actor_email: Optional[str] = None
+    action: str
+    target_type: str
+    target_id: Optional[str] = None
+    metadata_json: Optional[dict] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get(
+    "/audit-logs",
+    response_model=List[AuditLogOut],
+    status_code=status.HTTP_200_OK,
+    summary="List System Audit Logs for Compliance",
+)
+async def list_audit_logs(
+    action: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(
+        require_role([Role.ADMIN, Role.TPO, Role.SUPER_ADMIN, Role.COLLEGE_ADMIN])
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> List[AuditLogOut]:
+    """Retrieve chronologically ordered audit logs for institutional compliance."""
+    from datetime import datetime
+    from sqlalchemy.orm import selectinload
+    from app.models.audit import AuditLog
+
+    stmt = (
+        select(AuditLog)
+        .options(selectinload(AuditLog.actor))
+        .order_by(desc(AuditLog.created_at))
+        .limit(limit)
+    )
+    if action:
+        stmt = stmt.where(AuditLog.action.ilike(f"%{action}%"))
+
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+    out = []
+    for log in logs:
+        out.append(
+            AuditLogOut(
+                id=log.id,
+                actor_id=log.actor_id,
+                actor_name=log.actor.name if log.actor else None,
+                actor_email=log.actor.email if log.actor else None,
+                action=log.action,
+                target_type=log.target_type,
+                target_id=log.target_id,
+                metadata_json=log.metadata_json,
+                created_at=log.created_at,
+            )
+        )
+    return out
+
 
 

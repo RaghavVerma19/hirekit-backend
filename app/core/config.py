@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # AI (Gemini)
     GEMINI_API_KEY: str = ""
 
+    # External LaTeX compile API (managed: FormaTeX / LaTeX++ / self-hosted tex-to-pdf-api)
+    LATEX_API_URL: str = ""
+    LATEX_API_KEY: str = ""
+    LATEX_ENGINE: str = "pdflatex"
+    LATEX_TIMEOUT_SECONDS: int = 60
+
     # Email
     SENDGRID_API_KEY: str = ""
     FROM_EMAIL: str = "noreply@hirekit.com"

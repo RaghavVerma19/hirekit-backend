@@ -22,7 +22,7 @@ class ATSScoreResult(BaseModel):
 
 class ResumeCreate(BaseModel):
     title: str = Field("My Resume", min_length=1, max_length=150)
-    template_id: str = Field("modern-tech", max_length=50)
+    template_id: str = Field("preserved-layout-v1", max_length=50)
     auto_populate: bool = True
 
 

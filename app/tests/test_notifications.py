@@ -28,8 +28,9 @@ async def test_notifications_lifecycle(
     token = await _register_and_login(client, "notif_flow@test.com")
     headers = {"Authorization": f"Bearer {token}"}
 
+    import uuid
     me = await client.get("/api/v1/auth/me", headers=headers)
-    user_id = me.json()["id"]
+    user_id = uuid.UUID(me.json()["id"])
 
     # 1. Initially 0 unread
     res_count0 = await client.get("/api/v1/notifications/unread-count", headers=headers)

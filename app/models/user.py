@@ -11,10 +11,10 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    Uuid as UUID,
     desc,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 

@@ -83,12 +83,8 @@ class ATSService:
                     ATSService._call_gemini_api(content), timeout=10.0
                 )
             except asyncio.TimeoutError:
-                logger.error("gemini_scoring_timeout")
-                raise AppException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    error_code="AI_SERVICE_TIMEOUT",
-                    message="ATS scoring service timed out. Please try again.",
-                )
+                logger.warning("gemini_scoring_timeout_using_rule_engine")
+                return ATSService._rule_based_evaluation(content)
             except AppException:
                 raise
             except Exception as e:
@@ -133,7 +129,7 @@ class ATSService:
 
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.0-flash-lite",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -223,6 +219,9 @@ class ATSService:
                     impact="MEDIUM",
                 )
             )
+
+        if not strengths:
+            strengths.append("Standard ATS-compliant layout and structured section schema.")
 
         score = min(96, max(45, score))
 
@@ -392,3 +391,104 @@ Your response MUST be a valid, parseable JSON object matching this schema:
                 exc_info=True,
             )
             return fallback_data
+
+    @staticmethod
+    async def enhance_bullet_text(
+        text: str,
+        action: str = "improve",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Enhance resume bullet point using Gemini 2.5 Flash with fallback."""
+        ctx = context or {}
+        role = ctx.get("role") or "Software Engineer"
+        company = ctx.get("company") or "Technology Company"
+
+        action_prompts = {
+            "improve": f"Rewrite this resume bullet point into a high-impact STAR achievement bullet point for a {role} at {company}. Use a strong action verb, emphasize measurable business/engineering outcomes, and keep it crisp and ATS-optimized.",
+            "suggest": f"Given the role {role} at {company} and draft bullet: '{text}', generate a high-impact, professional achievement bullet point demonstrating leadership, scalability, or performance optimization.",
+            "grammar": f"Proofread and correct any grammatical errors, awkward phrasing, or tense inconsistencies in this resume bullet point for a {role}. Ensure past tense for past roles and strong active voice.",
+            "shorter": f"Condense this resume bullet point into a concise, punchy 1-sentence ATS bullet point without losing the core technical achievement or metrics.",
+            "vocabulary": f"Elevate the vocabulary and terminology in this resume bullet point for a {role}. Replace weak/passive words (like worked on, helped, managed) with high-caliber technical verbs (like Architected, Spearheaded, Engineered, Orchestrated).",
+        }
+
+        directive = action_prompts.get(action.lower(), action_prompts["improve"])
+
+        # Fallback generator
+        def _get_fallback():
+            cleaned = text.strip()
+            if not cleaned:
+                cleaned = f"Developed scalable full-stack features using modern cloud architecture and automated pipelines for {company}."
+            if action.lower() == "shorter":
+                return cleaned.split(".")[0] + "." if "." in cleaned else cleaned
+            elif action.lower() == "grammar":
+                return cleaned[0].upper() + cleaned[1:] if cleaned else cleaned
+            elif action.lower() in ("vocabulary", "improve"):
+                replacements = {
+                    "worked on": "engineered",
+                    "helped with": "collaborated on",
+                    "made": "architected",
+                    "handled": "orchestrated",
+                    "did": "executed",
+                }
+                res = cleaned
+                for old, new in replacements.items():
+                    res = res.replace(old, new).replace(old.capitalize(), new.capitalize())
+                if not any(res.startswith(v) for v in ["Architected", "Engineered", "Spearheaded", "Designed", "Optimized"]):
+                    res = f"Spearheaded and {res[0].lower() + res[1:]}" if res else res
+                return res
+            return cleaned
+
+        if not settings.GEMINI_API_KEY:
+            return {
+                "success": True,
+                "original": text,
+                "suggested_text": _get_fallback(),
+                "action": action,
+                "is_ai": False,
+            }
+
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            prompt = f"""
+You are an expert ATS Resume Coach and Principal Tech Recruiter.
+Task: {directive}
+
+Original text:
+\"\"\"{text}\"\"\"
+
+Output ONLY the final rewritten bullet point text as a single plain text string. Do not include markdown quotes, bullets (- or •), introductory remarks, or explanations.
+"""
+            loop = asyncio.get_running_loop()
+            resp = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt,
+                    ),
+                ),
+                timeout=7.0,
+            )
+            suggested = resp.text.strip().strip('"').strip("'")
+            if suggested.startswith(("- ", "• ", "* ")):
+                suggested = suggested[2:].strip()
+
+            return {
+                "success": True,
+                "original": text,
+                "suggested_text": suggested,
+                "action": action,
+                "is_ai": True,
+            }
+        except Exception as e:
+            logger.warning("gemini_bullet_enhance_failed_using_fallback", error=str(e))
+            return {
+                "success": True,
+                "original": text,
+                "suggested_text": _get_fallback(),
+                "action": action,
+                "is_ai": False,
+            }
